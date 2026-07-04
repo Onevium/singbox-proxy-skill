@@ -106,6 +106,23 @@ def node_prefix() -> str:
     return str(load_config().get("node_prefix", "Node")).strip() or "Node"
 
 
+def server_ip() -> str:
+    """The raw IP clients dial when the domain can't be resolved (e.g. desktop
+    Clash under TUN). Uses config `server_ip` if set, else resolves server_host."""
+    ip = str(load_config().get("server_ip", "")).strip()
+    if ip:
+        return ip
+    try:
+        import socket
+        return socket.gethostbyname(server_host())
+    except Exception:
+        return server_host()
+
+
+def effective_host(use_ip: bool = False) -> str:
+    return server_ip() if use_ip else server_host()
+
+
 # --------------------------------------------------------------------- auth/session
 def password_hash(password: str) -> str:
     salt = secrets.token_bytes(16)
@@ -416,12 +433,13 @@ def node_name(client: dict[str, Any]) -> str:
     return f"{node_prefix()}-{client['name']}-{client['port']}"
 
 
-def clash_node(client: dict[str, Any]) -> str:
+def clash_node(client: dict[str, Any], host: str | None = None) -> str:
+    host = host or server_host()
     return "\n".join(
         [
             f"  - name: {node_name(client)}",
             "    type: ss",
-            f"    server: {server_host()}",
+            f"    server: {host}",
             f"    port: {int(client['port'])}",
             f"    cipher: {SS_METHOD}",
             f'    password: "{client["password"]}"',
@@ -430,14 +448,15 @@ def clash_node(client: dict[str, Any]) -> str:
     )
 
 
-def ss_uri(client: dict[str, Any]) -> str:
+def ss_uri(client: dict[str, Any], host: str | None = None) -> str:
+    host = host or server_host()
     userinfo = base64.urlsafe_b64encode(f"{SS_METHOD}:{client['password']}".encode()).decode().rstrip("=")
     label = urllib.parse.quote(node_name(client))
-    return f"ss://{userinfo}@{server_host()}:{int(client['port'])}#{label}"
+    return f"ss://{userinfo}@{host}:{int(client['port'])}#{label}"
 
 
-def server_direct_rule() -> str:
-    host = server_host()
+def server_direct_rule(host: str | None = None) -> str:
+    host = host or server_host()
     try:
         ipaddress.ip_address(host)
         return f"  - IP-CIDR,{host}/32,DIRECT,no-resolve"
@@ -518,9 +537,9 @@ CN_DIRECT_RULES = """  - DOMAIN-SUFFIX,cn,DIRECT
   - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve"""
 
 
-def mihomo_full_config(client: dict[str, Any]) -> str:
+def mihomo_full_config(client: dict[str, Any], host: str | None = None) -> str:
     node = node_name(client)
-    host = server_host()
+    host = host or server_host()
     return f"""mixed-port: 7890
 allow-lan: false
 mode: rule
@@ -541,14 +560,14 @@ dns:
   nameserver: [223.5.5.5, 119.29.29.29, "https://doh.pub/dns-query"]
   fallback: ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]
 proxies:
-{clash_node(client)}
+{clash_node(client, host)}
 proxy-groups:
   - name: Proxy
     type: select
     proxies: [{node}, DIRECT]
 rules:
 {CN_DIRECT_RULES}
-{server_direct_rule()}
+{server_direct_rule(host)}
   - GEOSITE,private,DIRECT
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT
@@ -737,7 +756,7 @@ class Handler(BaseHTTPRequestHandler):
             self.client_config_page(urllib.parse.parse_qs(parsed.query).get("name", [""])[0])
         elif path == "/clients/download":
             q = urllib.parse.parse_qs(parsed.query)
-            self.download_client(q.get("name", [""])[0], q.get("fmt", ["clash"])[0])
+            self.download_client(q.get("name", [""])[0], q.get("fmt", ["clash"])[0], q.get("host", ["domain"])[0])
         elif path == "/export":
             self.export_page()
         elif path == "/export/download":
@@ -890,20 +909,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def client_config_page(self, name: str) -> None:
         client = self.find_client(load_clients(), name)
-        node = clash_node(client)
-        full = mihomo_full_config(client)
-        uri = ss_uri(client)
+        use_ip = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("host", ["domain"])[0] == "ip"
+        eff = effective_host(use_ip)
+        hp = "ip" if use_ip else "domain"
+        node = clash_node(client, eff)
+        full = mihomo_full_config(client, eff)
+        uri = ss_uri(client, eff)
         q = urllib.parse.quote(client["name"])
+        tabs = (
+            f"<a class='btn sm {'primary' if not use_ip else ''}' href='/clients/config?name={q}&amp;host=domain'>Domain</a>"
+            f"<a class='btn sm {'primary' if use_ip else ''}' href='/clients/config?name={q}&amp;host=ip'>IP</a>"
+        )
+        note = ("Raw IP — desktop Clash under TUN can't always resolve the domain, so IP is the reliable pick there. Trade-off: re-import if you migrate servers."
+                if use_ip else
+                "Domain — migrate servers with just a DNS change (no client re-import). If a desktop client times out resolving it, use the IP tab.")
         body = f"""<div class='panel'>
-  <div class='panel-head'><span>{html.escape(client['name'])} · port {int(client['port'])}</span><span class='actions'><a class='btn sm primary' href='/clients/download?name={q}&amp;fmt=clash'>&#8595; .yaml</a><a class='btn sm' href='/clients/download?name={q}&amp;fmt=uri'>&#8595; ss://</a><a class='btn sm' href='/clients'>&larr; Back</a></span></div>
+  <div class='panel-head'><span>{html.escape(client['name'])} · port {int(client['port'])}</span><span class='actions'>{tabs}<a class='btn sm primary' href='/clients/download?name={q}&amp;fmt=clash&amp;host={hp}'>&#8595; .yaml</a><a class='btn sm' href='/clients/download?name={q}&amp;fmt=uri&amp;host={hp}'>&#8595; ss://</a><a class='btn sm' href='/clients'>&larr; Back</a></span></div>
   <div class='panel-body'>
-    <p class='hint'>This account = server + port + password. Phone: import the <b>URI</b>. Desktop: import the <b>full Clash config</b> below.</p>
+    <p class='hint'>Phone: import the <b>URI</b>. Desktop: import the <b>full Clash config</b> below. {note}</p>
     <dl class='kv'>
-      <dt>Server</dt><dd>{html.escape(server_host())}</dd>
+      <dt>Server</dt><dd>{html.escape(eff)} <span style='color:var(--muted)'>({hp})</span></dd>
       <dt>Port</dt><dd>{int(client['port'])}</dd>
       <dt>Cipher</dt><dd>{SS_METHOD}</dd>
       <dt>Password</dt><dd><span id='c-pwd'>{html.escape(client['password'])}</span><button class='btn sm copy' data-t='c-pwd' onclick='bpCopy(this)'>copy</button></dd>
-      <dt>URI</dt><dd><span id='c-uri' style='overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px'>{html.escape(uri)}</span><button class='btn sm copy' data-t='c-uri' onclick='bpCopy(this)'>copy ss://</button></dd>
+      <dt>URI</dt><dd><span id='c-uri' style='overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:500px'>{html.escape(uri)}</span><button class='btn sm copy' data-t='c-uri' onclick='bpCopy(this)'>copy ss://</button></dd>
     </dl>
   </div>
 </div>
@@ -914,12 +943,14 @@ class Handler(BaseHTTPRequestHandler):
 <div class='panel'><div class='panel-body'><div class='codewrap'><button class='btn sm copy' data-t='cfg-full' onclick='bpCopy(this)'>copy</button><pre id='cfg-full'>{html.escape(full)}</pre></div></div></div>"""
         self.send_html("Client config", self.layout("Client config", body))
 
-    def download_client(self, name: str, fmt: str) -> None:
+    def download_client(self, name: str, fmt: str, host: str = "domain") -> None:
         client = self.find_client(load_clients(), name)
+        eff = effective_host(host == "ip")
+        suffix = "-ip" if host == "ip" else ""
         if fmt == "uri":
-            self.send_download(f"{client['name']}-ss.txt", ss_uri(client) + "\n", "text/plain; charset=utf-8")
+            self.send_download(f"{client['name']}{suffix}-ss.txt", ss_uri(client, eff) + "\n", "text/plain; charset=utf-8")
         else:
-            self.send_download(f"{client['name']}-clash.yaml", mihomo_full_config(client), "application/x-yaml; charset=utf-8")
+            self.send_download(f"{client['name']}{suffix}-clash.yaml", mihomo_full_config(client, eff), "application/x-yaml; charset=utf-8")
 
     def download_export(self) -> None:
         clients = [c for c in load_clients() if c.get("enabled", True)]

@@ -52,6 +52,31 @@ Remove it when done: `sudo route -n delete -host <new-server-ip>`.
 - For a quick isolation test, hand the phone an `ss://` that uses the **raw IP**
   instead of the domain; if that connects, the issue was domain resolution.
 
+## Desktop Clash times out on a domain node (but the phone works)
+
+Exact symptom: the phone (Hiddify) connects via the domain, but desktop Clash
+Verge / mihomo times out on the *same* domain — activating it drops all internet,
+so you revert to keep connectivity (which makes it look intermittent).
+
+Cause: **mihomo uses its own internal DNS**, not the OS resolver. Under TUN, with
+only DoH (`https://…`) nameservers and no `default-nameserver`, mihomo can't
+bootstrap the resolvers and fails to resolve the proxy server's domain
+(`context deadline exceeded`) — the node times out. The phone works because it
+resolves via the OS; IP-based nodes work because they need no resolution.
+
+Fixes (both shipped by this skill):
+1. The exported Clash config now includes `default-nameserver` (plain-UDP
+   `223.5.5.5 / 119.29.29.29 / 114.114.114.114`) so mihomo can resolve. Re-import
+   the current config.
+2. Or use the **IP tab** on the panel's Config page (needs `server_ip` set in the
+   panel config) and import the IP version on that desktop — 100% reliable, at the
+   cost of re-importing on a server migration. A common split: **desktop = IP,
+   phone = domain**.
+
+Confirm what mihomo actually resolves, via its control API:
+`curl --unix-socket <verge-mihomo.sock> "http://localhost/dns/query?name=<domain>&type=A"`
+— `context deadline exceeded` confirms the DNS-bootstrap problem.
+
 ## Hiddify shows "connecting" forever
 
 Hiddify (sing-box core) reliably imports **classic SS** `ss://` links. It has

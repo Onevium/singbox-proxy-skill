@@ -50,14 +50,26 @@ step links one level deep into `references/` for detail.
    console too**. If they'd rather never touch the firewall again,
    offer the single-shared-port + single-password model (no per-device isolation).
 
-## What you need from the user
+## Step 0 — gather inputs from the user FIRST (reverse-prompt)
 
-- A **fresh Ubuntu/Debian VPS** + SSH access (`user@host` + key).
-- A **clean-IP region** for their location. (If unsure and the user is in a
-  heavily-censored region, prefer a region a working peer already uses.)
-- Optional: a **domain** they control (for a stable, migratable endpoint).
-- Optional: an **upstream proxy** (`socks5://user:pass@host:port`) if they want
-  to exit from a residential IP instead of the VPS directly.
+This skill is normally run by an agent for a user who may not have things ready.
+**Ask for the following and wait for answers before touching anything** — don't guess:
+
+**Required**
+- A **fresh Ubuntu/Debian VPS** they control — its `user@host` and the **SSH key path**.
+- The **cloud provider** (Tencent / Aliyun / Vultr / DO …) — you'll tell them the
+  exact ports to open in its firewall console, the one layer you can't automate.
+
+**Recommended / optional**
+- A **domain** they control (stable, migratable endpoint). None → clients use the raw IP.
+- An **upstream SOCKS5/HTTP proxy** (`socks5://user:pass@host:port`) for a static
+  residential exit IP (`references/providers.md`). Omit → exit directly from the VPS.
+- Their **rough location / censorship level** → pick a nearby clean-IP region.
+
+If they don't have a VPS yet, help them pick one (`references/providers.md`) before
+deploying. If they give a domain, also set `server_ip` in the panel config so the
+Config page can hand out an **IP-based** config (desktop Clash often needs it — see
+`references/troubleshooting.md`).
 
 **Choosing a VPS and an exit IP:** see `references/providers.md` — clean-IP VPS
 options, static-residential upstream providers, and *why a stable IP matters for
@@ -106,7 +118,10 @@ Open the panel over an SSH tunnel:
   One account = one port = one password, so losing a device = rotate just that one.
   New account on a new port → also open that port in the cloud firewall.
 - **Config page** — per-account `ss://` URI (phone) + full Clash/Mihomo YAML
-  (desktop), one-click copy.
+  (desktop), one-click copy **and download**, with a **Domain / IP toggle**:
+  hand out the domain version for portability, or the IP version when a desktop
+  Clash can't resolve the domain under TUN (set `server_ip` in the panel config
+  to enable the IP tab).
 
 ## Give configs to devices
 
