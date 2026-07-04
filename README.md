@@ -2,9 +2,10 @@
 
 # singbox-proxy-skill —— 用 Claude Code 一键搭建稳定 IP 代理
 
-> 给开发者的「**稳定 IP 搭建**」skill:让 Claude Code 帮你在自己的 VPS 上，一条命令级地
-> 起一套 **sing-box Shadowsocks 中转 + 网页管理面板 + 安全加固**，可选链一个**静态住宅出口**，
-> 让你从任何网络都能**稳定、可信地**访问 Claude Code / Claude API / AI 开发工具。
+> 给开发者的「**稳定 IP 搭建**」skill:一条命令级地在自己的 VPS 上起一套
+> **sing-box Shadowsocks 中转 + 网页管理面板 + 安全加固**，可选链一个**静态住宅出口**，
+> 让你从任何网络都能**稳定、可信地**访问 Claude Code / Claude API / Codex / Cursor 等 AI 开发工具。
+> 手动可跑,也能被任何 AI 编码 agent 驱动。
 
 **singbox-proxy-skill** 是一个开源的 [Claude Code](https://claude.com/claude-code) agent
 skill（也可移植到 Cursor / Cline / Aider / Codex 等）。你把一台干净的 Ubuntu VPS 交给它，它就：
@@ -26,12 +27,19 @@ Claude Code / Claude API、OpenAI、Cursor 这些 AI 工具**对你的出口 IP 
 所以最稳的组合是:**离你近的干净 IP VPS 做入口**（握手快、线路好）+ **静态住宅上游做出口**（AI 服务看到的那个可信身份）。
 只想翻过网络封锁、不在乎 IP 信誉，就跳过上游，直接从 VPS 出。选型见 [`references/providers.md`](references/providers.md)。
 
-## 快速开始（在 Claude Code 里）
+## 快速开始
 
-对 Claude Code 说：**"帮我用这个 skill 搭一套稳定 IP 代理"**，或直接 `/singbox-proxy`。它会问你要
-VPS 的 `user@host` + 密钥、要不要域名、要不要上游住宅代理，然后照 [`SKILL.md`](SKILL.md) 一步步做完。
+> 你**不需要已经能用 Claude Code**（正因为环境不稳才来搭它）。三条命令**纯手动**就能跑完，
+> 或者用你**手头任何**能读 skill 的编码 agent / AI IDE 来驱动。
 
-**手动跑也行:**
+**方式一 · 手动三条命令（不依赖任何 AI 工具，最省事）** —— 见下面。
+
+**方式二 · 让 agent / AI IDE 帮你做**：把这个仓库交给你在用的工具 —— Claude Code、
+[Codex](https://openai.com/codex/)、Cursor、Cline、Aider，或国内的**通义灵码 / CodeGeeX / 文心快码 Comate /
+MarsCode / Trae** 等 —— 让它读 [`SKILL.md`](SKILL.md)，说一句"照这个 skill 在我这台 VPS 上搭稳定 IP 代理"，
+把 VPS 的 `user@host` + 密钥给它即可。（用 Claude Code 的话可直接 `/singbox-proxy`。）
+
+**手动三条命令:**
 
 ```bash
 # 1. 部署（SERVER_HOST=客户端连的域名或IP；UPSTREAM_URL 可选）

@@ -2,11 +2,11 @@
 
 # singbox-proxy-skill — deploy a stable-IP proxy with Claude Code
 
-> A **"stable-IP setup"** skill for developers: let Claude Code stand up a
-> **sing-box Shadowsocks relay + web admin panel + hardening** on your own VPS,
-> optionally chained to a **static residential exit**, so you can reach
-> **Claude Code / Claude API / AI dev tools reliably and with a trusted IP** from
-> any network.
+> A **"stable-IP setup"** skill for developers: stand up a **sing-box Shadowsocks
+> relay + web admin panel + hardening** on your own VPS, optionally chained to a
+> **static residential exit**, so you can reach **Claude Code / Claude API / Codex /
+> Cursor and other AI dev tools reliably and with a trusted IP** from any network.
+> Run it by hand, or drive it with any AI coding agent.
 
 **singbox-proxy-skill** is an open-source [Claude Code](https://claude.com/claude-code)
 agent skill (portable to Cursor / Cline / Aider / Codex …). Hand it a fresh Ubuntu
@@ -36,8 +36,19 @@ reputation? Skip the upstream and exit straight from the VPS. See
 
 ## Quick start
 
-Tell Claude Code: **"deploy a stable-IP proxy with this skill"**, or run `/singbox-proxy`.
-Or manually:
+> You **don't need a working AI tool yet** (you're setting one up *because* your
+> environment is flaky). The three commands below run **by hand**, or you can
+> drive the skill with **any** coding agent / AI IDE you already have.
+
+**Option A — run it by hand** (no AI tool needed): the three commands below.
+
+**Option B — let an agent / AI IDE do it**: hand this repo to whatever you use —
+Claude Code, [Codex](https://openai.com/codex/), Cursor, Cline, Aider, or Chinese
+IDEs like **Tongyi Lingma / CodeGeeX / Comate / MarsCode / Trae** — point it at
+[`SKILL.md`](SKILL.md) and give it your VPS `user@host` + key. (On Claude Code:
+`/singbox-proxy`.)
+
+**By hand:**
 
 ```bash
 # 1. deploy (SERVER_HOST = domain/IP clients connect to; UPSTREAM_URL optional)
