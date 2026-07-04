@@ -435,6 +435,79 @@ def server_direct_rule() -> str:
         return f"  - DOMAIN,{host},DIRECT"
 
 
+# Explicit China-direct rules — work without a geosite/geoip database (which the
+# client may not have downloaded yet), so domestic sites stay direct from the
+# first connect. GEOSITE,cn / GEOIP,CN below still catch everything else.
+CN_DIRECT_RULES = """  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,wechat.com,DIRECT
+  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,tencent-cloud.com,DIRECT
+  - DOMAIN-SUFFIX,qcloud.com,DIRECT
+  - DOMAIN-SUFFIX,dingtalk.com,DIRECT
+  - DOMAIN-SUFFIX,aliyun.com,DIRECT
+  - DOMAIN-SUFFIX,alicdn.com,DIRECT
+  - DOMAIN-SUFFIX,alibaba.com,DIRECT
+  - DOMAIN-SUFFIX,taobao.com,DIRECT
+  - DOMAIN-SUFFIX,tmall.com,DIRECT
+  - DOMAIN-SUFFIX,alipay.com,DIRECT
+  - DOMAIN-SUFFIX,jd.com,DIRECT
+  - DOMAIN-SUFFIX,360buyimg.com,DIRECT
+  - DOMAIN-SUFFIX,douyin.com,DIRECT
+  - DOMAIN-SUFFIX,byteimg.com,DIRECT
+  - DOMAIN-SUFFIX,bytedance.com,DIRECT
+  - DOMAIN-SUFFIX,feishu.cn,DIRECT
+  - DOMAIN-SUFFIX,larksuite.com,DIRECT
+  - DOMAIN-SUFFIX,wps.cn,DIRECT
+  - DOMAIN-SUFFIX,kdocs.cn,DIRECT
+  - DOMAIN-SUFFIX,kingsoft.com,DIRECT
+  - DOMAIN-SUFFIX,bilibili.com,DIRECT
+  - DOMAIN-SUFFIX,biliapi.com,DIRECT
+  - DOMAIN-SUFFIX,hdslb.com,DIRECT
+  - DOMAIN-SUFFIX,iqiyi.com,DIRECT
+  - DOMAIN-SUFFIX,iqiyipic.com,DIRECT
+  - DOMAIN-SUFFIX,youku.com,DIRECT
+  - DOMAIN-SUFFIX,zhihu.com,DIRECT
+  - DOMAIN-SUFFIX,zhimg.com,DIRECT
+  - DOMAIN-SUFFIX,xiaohongshu.com,DIRECT
+  - DOMAIN-SUFFIX,xhscdn.com,DIRECT
+  - DOMAIN-SUFFIX,weibo.com,DIRECT
+  - DOMAIN-SUFFIX,weibocdn.com,DIRECT
+  - DOMAIN-SUFFIX,netease.com,DIRECT
+  - DOMAIN-SUFFIX,163.com,DIRECT
+  - DOMAIN-SUFFIX,126.net,DIRECT
+  - DOMAIN-SUFFIX,music.163.com,DIRECT
+  - DOMAIN-SUFFIX,douban.com,DIRECT
+  - DOMAIN-SUFFIX,csdn.net,DIRECT
+  - DOMAIN-SUFFIX,cnblogs.com,DIRECT
+  - DOMAIN-SUFFIX,juejin.cn,DIRECT
+  - DOMAIN-SUFFIX,gitee.com,DIRECT
+  - DOMAIN-SUFFIX,oschina.net,DIRECT
+  - DOMAIN-SUFFIX,huawei.com,DIRECT
+  - DOMAIN-SUFFIX,huaweicloud.com,DIRECT
+  - DOMAIN-SUFFIX,volcengine.com,DIRECT
+  - DOMAIN-SUFFIX,mi.com,DIRECT
+  - DOMAIN-SUFFIX,xiaomi.com,DIRECT
+  - DOMAIN-SUFFIX,meituan.com,DIRECT
+  - DOMAIN-SUFFIX,dianping.com,DIRECT
+  - DOMAIN-SUFFIX,amap.com,DIRECT
+  - DOMAIN-SUFFIX,autonavi.com,DIRECT
+  - DOMAIN-SUFFIX,12306.cn,DIRECT
+  - DOMAIN-SUFFIX,gov.cn,DIRECT
+  - DOMAIN-SUFFIX,edu.cn,DIRECT
+  - DOMAIN-SUFFIX,jd.com,DIRECT
+  - DOMAIN-SUFFIX,pinduoduo.com,DIRECT
+  - DOMAIN-SUFFIX,yuque.com,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve"""
+
+
 def mihomo_full_config(client: dict[str, Any]) -> str:
     node = node_name(client)
     host = server_host()
@@ -463,10 +536,11 @@ proxy-groups:
     type: select
     proxies: [{node}, DIRECT]
 rules:
+{CN_DIRECT_RULES}
+{server_direct_rule()}
   - GEOSITE,private,DIRECT
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT
-{server_direct_rule()}
   - MATCH,Proxy
 """
 
@@ -588,6 +662,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_download(self, filename: str, content: str, content_type: str = "application/octet-stream") -> None:
+        data = content.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
     def read_form(self) -> dict[str, str]:
         length = int(self.headers.get("Content-Length", "0"))
         data = self.rfile.read(length).decode("utf-8")
@@ -640,8 +724,13 @@ class Handler(BaseHTTPRequestHandler):
             self.clients_page()
         elif path == "/clients/config":
             self.client_config_page(urllib.parse.parse_qs(parsed.query).get("name", [""])[0])
+        elif path == "/clients/download":
+            q = urllib.parse.parse_qs(parsed.query)
+            self.download_client(q.get("name", [""])[0], q.get("fmt", ["clash"])[0])
         elif path == "/export":
             self.export_page()
+        elif path == "/export/download":
+            self.download_export()
         elif path == "/audit":
             self.audit_page()
         else:
@@ -791,8 +880,9 @@ class Handler(BaseHTTPRequestHandler):
         node = clash_node(client)
         full = mihomo_full_config(client)
         uri = ss_uri(client)
+        q = urllib.parse.quote(client["name"])
         body = f"""<div class='panel'>
-  <div class='panel-head'><span>{html.escape(client['name'])} · port {int(client['port'])}</span><a class='btn sm' href='/clients'>&larr; Back</a></div>
+  <div class='panel-head'><span>{html.escape(client['name'])} · port {int(client['port'])}</span><span class='actions'><a class='btn sm primary' href='/clients/download?name={q}&amp;fmt=clash'>&#8595; .yaml</a><a class='btn sm' href='/clients/download?name={q}&amp;fmt=uri'>&#8595; ss://</a><a class='btn sm' href='/clients'>&larr; Back</a></span></div>
   <div class='panel-body'>
     <p class='hint'>This account = server + port + password. Phone: import the <b>URI</b>. Desktop: import the <b>full Clash config</b> below.</p>
     <dl class='kv'>
@@ -810,6 +900,19 @@ class Handler(BaseHTTPRequestHandler):
 <h2>Full Clash / Mihomo config (import as a whole)</h2>
 <div class='panel'><div class='panel-body'><div class='codewrap'><button class='btn sm copy' data-t='cfg-full' onclick='bpCopy(this)'>copy</button><pre id='cfg-full'>{html.escape(full)}</pre></div></div></div>"""
         self.send_html("Client config", self.layout("Client config", body))
+
+    def download_client(self, name: str, fmt: str) -> None:
+        client = self.find_client(load_clients(), name)
+        if fmt == "uri":
+            self.send_download(f"{client['name']}-ss.txt", ss_uri(client) + "\n", "text/plain; charset=utf-8")
+        else:
+            self.send_download(f"{client['name']}-clash.yaml", mihomo_full_config(client), "application/x-yaml; charset=utf-8")
+
+    def download_export(self) -> None:
+        clients = [c for c in load_clients() if c.get("enabled", True)]
+        nodes = "\n".join(clash_node(c) for c in clients)
+        group = "proxy-groups:\n  - name: Proxy\n    type: select\n    proxies:\n" + "".join(f"      - {node_name(c)}\n" for c in clients)
+        self.send_download("nodes.yaml", "proxies:\n" + nodes + "\n\n" + group, "application/x-yaml; charset=utf-8")
 
     def find_client(self, clients: list[dict[str, Any]], name: str) -> dict[str, Any]:
         for client in clients:
@@ -895,7 +998,7 @@ class Handler(BaseHTTPRequestHandler):
         nodes = "\n".join(clash_node(c) for c in clients)
         group = "proxy-groups:\n  - name: Proxy\n    type: select\n    proxies:\n" + "".join(f"      - {node_name(c)}\n" for c in clients)
         export_config = "proxies:\n" + nodes + "\n\n" + group
-        body = f"<div class='panel'><div class='panel-head'><span>All enabled nodes (Mihomo)</span></div><div class='panel-body'><div class='codewrap'><button class='btn sm copy' data-t='exp' onclick='bpCopy(this)'>copy all</button><pre id='exp'>{html.escape(export_config)}</pre></div></div></div>"
+        body = f"<div class='panel'><div class='panel-head'><span>All enabled nodes (Mihomo)</span><a class='btn sm primary' href='/export/download'>&#8595; nodes.yaml</a></div><div class='panel-body'><div class='codewrap'><button class='btn sm copy' data-t='exp' onclick='bpCopy(this)'>copy all</button><pre id='exp'>{html.escape(export_config)}</pre></div></div></div>"
         self.send_html("Export", self.layout("Export", body))
 
     def audit_page(self) -> None:
