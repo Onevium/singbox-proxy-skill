@@ -1,0 +1,23 @@
+# secrets — never commit
+*.pem
+*.key
+*.p12
+_secrets/
+config.json
+clients.json
+admin.json
+initial-admin-password.txt
+*-password.txt
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os / editor
+.DS_Store
+*.swp
+
+# runtime artifacts
+*.tar.gz
+*.log

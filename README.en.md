@@ -1,0 +1,87 @@
+[中文](README.md) · **English**
+
+# singbox-proxy-skill — deploy a stable-IP proxy with Claude Code
+
+> A **"stable-IP setup"** skill for developers: let Claude Code stand up a
+> **sing-box Shadowsocks relay + web admin panel + hardening** on your own VPS,
+> optionally chained to a **static residential exit**, so you can reach
+> **Claude Code / Claude API / AI dev tools reliably and with a trusted IP** from
+> any network.
+
+**singbox-proxy-skill** is an open-source [Claude Code](https://claude.com/claude-code)
+agent skill (portable to Cursor / Cline / Aider / Codex …). Hand it a fresh Ubuntu
+VPS and it:
+
+- installs **sing-box** (classic Shadowsocks `aes-256-gcm`, one account = one port = one password);
+- runs a **single-file web panel**: live server monitoring (CPU/mem/disk/net/service health),
+  account CRUD + rotate, one-click config export;
+- hardens the box (**key-only SSH, UFW, fail2ban, auto-updates**);
+- optionally **chains an upstream SOCKS5/HTTP proxy** (residential exit) and
+  optionally **binds a domain** (migrate servers with a one-line DNS change);
+- exports **Clash / `ss://`** configs for desktop and phone.
+
+## Why a *stable* IP — the Claude Code problem
+
+Claude Code / Claude API, OpenAI, Cursor are sensitive to your egress IP:
+
+- **datacenter / cloud IPs** get rate-limited, challenged, or blocked;
+- **shared VPN IPs** rotate and get flagged — constant CAPTCHAs and re-logins;
+- a **static residential / ISP IP** looks like a normal home user: stable, trusted,
+  no rotation — your Claude Code stays logged in and unthrottled.
+
+Best setup: a nearby **clean-IP VPS** as the entry + a **static residential
+upstream** as the exit. Only bypassing a network block and don't care about IP
+reputation? Skip the upstream and exit straight from the VPS. See
+[`references/providers.md`](references/providers.md).
+
+## Quick start
+
+Tell Claude Code: **"deploy a stable-IP proxy with this skill"**, or run `/singbox-proxy`.
+Or manually:
+
+```bash
+# 1. deploy (SERVER_HOST = domain/IP clients connect to; UPSTREAM_URL optional)
+SERVER_HOST=vpn.example.com FIRST_ACCOUNT=my-laptop FIRST_PORT=443 \
+UPSTREAM_URL=socks5://user:pass@1.2.3.4:1080 \
+./scripts/deploy.sh -i ~/.ssh/id_ed25519 root@203.0.113.10
+
+# 2. harden
+ssh -i ~/.ssh/id_ed25519 root@203.0.113.10 \
+  'cd /tmp/proxy-admin-panel && sudo SS_PORTS="443 80 8443" TIMEZONE=Asia/Seoul bash scripts/harden.sh'
+
+# 3. tunnel to the panel (local-only, never public)
+ssh -i ~/.ssh/id_ed25519 -L 17000:127.0.0.1:7000 root@203.0.113.10
+# open http://127.0.0.1:17000
+```
+
+Migrating later is a single DNS A-record change — clients don't re-import.
+
+## Hard-won rules (the heart of this project)
+
+1. **Classic Shadowsocks, not SS2022** — SS2022 multi-user keys break Hiddify.
+2. **Times out but the port is reachable = dirty IP, not config** — get a clean IP.
+3. **Never expose the panel publicly** — SSH tunnel, or a single-source-IP firewall rule.
+4. **Point clients at a domain (DNS-only)** — migrate with one DNS change.
+5. **Secrets stay on the server** — never committed.
+
+See [`references/`](references) for troubleshooting, security, clients, providers.
+
+## Layout
+
+```text
+SKILL.md            full deploy/ops workflow (agent entry point)
+app.py              single-file web admin panel (stdlib only)
+scripts/            install.sh · harden.sh · deploy.sh
+references/         providers · troubleshooting · security · clients
+examples/           config.example.json
+```
+
+## Safety & compliance
+
+Self-hosted, for you and people you trust. Follow your local laws and your
+VPS/proxy providers' terms. This project just configures a VPS you own as a
+hardened Shadowsocks relay.
+
+## License
+
+[MIT](LICENSE)
