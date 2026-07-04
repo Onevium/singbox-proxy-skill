@@ -20,6 +20,25 @@ VPS and it:
   optionally **binds a domain** (migrate servers with a one-line DNS change);
 - exports **Clash / `ss://`** configs for desktop and phone.
 
+## The admin panel
+
+After login: **live server monitoring** (CPU / memory / disk / network / service
+health / egress IP), reached over an SSH tunnel, never exposed publicly:
+
+![Dashboard](assets/dashboard.png)
+
+**Account management** — one account = one port = one password; create / disable /
+enable / rotate / delete:
+
+![Accounts](assets/accounts.png)
+
+**One-click config export per account** (`ss://` for phones + full Clash YAML for
+desktops, with China/overseas split routing):
+
+![Client config](assets/config.png)
+
+> All values shown are sanitized samples (`vpn.example.com` / `203.0.113.7`).
+
 ## Why a *stable* IP — the Claude Code problem
 
 Claude Code / Claude API, OpenAI, Cursor are sensitive to your egress IP:
