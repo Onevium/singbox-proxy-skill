@@ -537,7 +537,8 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter: ["+.{host}", "*.lan", "*.local"]
-  nameserver: ["https://223.5.5.5/dns-query", "https://doh.pub/dns-query"]
+  default-nameserver: [223.5.5.5, 119.29.29.29, 114.114.114.114]
+  nameserver: [223.5.5.5, 119.29.29.29, "https://doh.pub/dns-query"]
   fallback: ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]
 proxies:
 {clash_node(client)}
