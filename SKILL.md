@@ -41,11 +41,13 @@ step links one level deep into `references/` for detail.
 6. **One account = one port = one password — open every port in *two* firewalls.**
    Classic SS has no multi-user, so each account needs its own port, and each port
    must be allowed in BOTH the machine's **UFW** *and* the **cloud provider's
-   security group / firewall console**. Forgetting the cloud layer looks like
-   *"some ports connect, others time out"* (e.g. 80 works, 443 hangs). Tell the
-   user this up front, list exactly which ports to open in their cloud console,
-   and remind them that **adding an account on a new port means opening that port
-   in the cloud console too**. If they'd rather never touch the firewall again,
+   security group / firewall console**. The panel auto-runs `ufw allow`/`ufw
+   delete` on account add/delete, so **UFW is handled — only the cloud layer is
+   manual**. Forgetting the cloud layer looks like *"some ports connect, others
+   time out"* (e.g. 80 works, 443 hangs). Tell the user this up front, list
+   exactly which ports to open in their cloud console, and remind them that
+   **adding an account on a new port means opening that port in the cloud
+   console too**. If they'd rather never touch the firewall again,
    offer the single-shared-port + single-password model (no per-device isolation).
 
 ## What you need from the user

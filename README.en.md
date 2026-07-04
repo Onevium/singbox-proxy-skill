@@ -93,12 +93,15 @@ This uses **classic Shadowsocks**: **one account = one port = one password**.
 - ✅ **Upside:** works in every client (incl. Hiddify); each device has its own
   password, so a lost device means rotating/disabling *just that one* account.
 - ⚠️ **Cost:** **every port you use must be opened in BOTH firewall layers** —
-  1. the machine's **UFW** (handled by `harden.sh`), and
+  1. the machine's **UFW** — `harden.sh` sets the baseline, and the panel
+     auto-runs `ufw allow` / `ufw delete` when you add / delete an account, so you
+     don't manage this layer; and
   2. **your cloud provider's security group / firewall console** (Vultr, DO,
-     Tencent, Aliyun… — you must open these **by hand**).
+     Tencent, Aliyun… — you must open these **by hand**; no software can).
   - Forget layer 2 and you get *"some ports connect, others time out"* — e.g.
     80 works but 443 hangs → the cloud console hasn't opened 443.
-- ➕ **A new account on a new port = open that port** in the cloud console too.
+- ➕ **A new account on a new port**: the panel opens UFW for you — you only need
+  to open that port in your cloud console (the panel reminds you after creation).
 - 🧩 **Don't want a port per account?** Put everyone on **one shared port + one
   password** (e.g. all on 443): set `FIRST_PORT` once and hand out the same
   config. Never open another port — at the cost of no per-device isolation

@@ -266,6 +266,16 @@ def apply_sing_box(clients: list[dict[str, Any]]) -> tuple[bool, str]:
         tmp_path.unlink(missing_ok=True)
 
 
+def ufw_allow(port: int) -> None:
+    """Open a Shadowsocks port in UFW (best-effort; the cloud provider's firewall
+    still has to be opened by hand — no software can do that for you)."""
+    run(["ufw", "allow", f"{int(port)}/tcp", "comment", "Shadowsocks (panel)"], timeout=10)
+
+
+def ufw_delete(port: int) -> None:
+    run(["ufw", "delete", "allow", f"{int(port)}/tcp"], timeout=10)
+
+
 # --------------------------------------------------------------------- monitoring
 def _read_proc(path: str) -> str:
     try:
@@ -853,6 +863,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- accounts --
     def clients_page(self) -> None:
+        flash = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("flash", [""])[0]
         clients = load_clients()
         rows = []
         for c in clients:
@@ -872,7 +883,8 @@ class Handler(BaseHTTPRequestHandler):
   <div><label>Status</label><select name="enabled"><option value="true">enabled</option><option value="false">disabled</option></select></div>
   <button class="btn primary" type="submit">+ Create</button>
 </form>"""
-        body = f"<div class='panel'><div class='panel-head'><span>New account</span><span style='font-weight:400;color:var(--muted);font-size:12px'>one account = one port + one password</span></div><div class='panel-body'>{form}</div></div><h2>Accounts</h2><div class='panel'>{table}</div><div style='height:16px'></div><form method='post' action='/clients/apply'><button class='btn' type='submit'>Re-check &amp; apply sing-box config</button></form>"
+        flash_html = f"<div class='flash'>{html.escape(flash)}</div>" if flash else ""
+        body = f"{flash_html}<div class='panel'><div class='panel-head'><span>New account</span><span style='font-weight:400;color:var(--muted);font-size:12px'>one account = one port + one password · new port also needs opening in your cloud firewall</span></div><div class='panel-body'>{form}</div></div><h2>Accounts</h2><div class='panel'>{table}</div><div style='height:16px'></div><form method='post' action='/clients/apply'><button class='btn' type='submit'>Re-check &amp; apply sing-box config</button></form>"
         self.send_html("Accounts", self.layout("Accounts", body))
 
     def client_config_page(self, name: str) -> None:
@@ -936,8 +948,10 @@ class Handler(BaseHTTPRequestHandler):
         if not ok:
             raise RuntimeError(message)
         save_clients(clients)
+        ufw_allow(port)
         audit("client.add", f"{name}:{port}")
-        self.redirect("/clients")
+        self.redirect("/clients?flash=" + urllib.parse.quote(
+            f"Account '{name}' created on port {port}. UFW opened this port — now ALSO open TCP {port} in your cloud provider's firewall / security group, or it will time out."))
 
     def toggle_client(self, form: dict[str, str]) -> None:
         clients = load_clients()
@@ -966,13 +980,15 @@ class Handler(BaseHTTPRequestHandler):
     def delete_client(self, form: dict[str, str]) -> None:
         clients = load_clients()
         name = form.get("name", "")
-        self.find_client(clients, name)
+        deleted = self.find_client(clients, name)
+        port = int(deleted["port"])
         clients = [c for c in clients if c["name"] != name]
         ok, message = apply_sing_box(clients)
         if not ok:
             raise RuntimeError(message)
         save_clients(clients)
-        audit("client.delete", name)
+        ufw_delete(port)
+        audit("client.delete", f"{name}:{port}")
         self.redirect("/clients")
 
     def apply_clients(self) -> None:
