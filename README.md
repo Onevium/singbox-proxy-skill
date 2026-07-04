@@ -1,6 +1,6 @@
 **中文** · [English](README.en.md)
 
-# singbox-proxy-skill —— 用 Claude Code 一键搭建稳定 IP 代理
+# singbox-proxy-skill —— 给 Claude Code / AI 工具自建稳定 IP 代理
 
 > 给开发者的「**稳定 IP 搭建**」skill:一条命令级地在自己的 VPS 上起一套
 > **sing-box Shadowsocks 中转 + 网页管理面板 + 安全加固**，可选链一个**静态住宅出口**，

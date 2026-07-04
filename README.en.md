@@ -1,6 +1,6 @@
 [中文](README.md) · **English**
 
-# singbox-proxy-skill — deploy a stable-IP proxy with Claude Code
+# singbox-proxy-skill — a stable-IP proxy for Claude Code & AI tools
 
 > A **"stable-IP setup"** skill for developers: stand up a **sing-box Shadowsocks
 > relay + web admin panel + hardening** on your own VPS, optionally chained to a
