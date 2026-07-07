@@ -6,9 +6,12 @@ description: >-
   panel with live server monitoring, SSH/UFW/fail2ban hardening, an optional
   upstream SOCKS5/HTTP exit (residential proxy), an optional domain so you can
   swap servers without re-issuing client configs, and one-click Clash / ss://
-  exports. Use when the user wants to "set up a proxy / VPN server", "deploy
-  shadowsocks / sing-box", "self-host a proxy", "make my own VPN", "migrate my
-  proxy to a new server", or "add / rotate a proxy account".
+  exports. Picks an anti-censorship transport — classic SS, VLESS+REALITY, or
+  VLESS+WS+TLS behind a Cloudflare CDN — so a clean IP that gets blocked or
+  throttled still survives. Use when the user wants to "set up a proxy / VPN
+  server", "deploy shadowsocks / sing-box / reality / cloudflare cdn proxy",
+  "self-host a proxy", "make my own VPN", "get around GFW blocking or throttling",
+  "migrate my proxy to a new server", or "add / rotate a proxy account".
 argument-hint: "<user@host> [domain]"
 user-invocable: true
 ---
@@ -25,17 +28,22 @@ step links one level deep into `references/` for detail.
    (combined `iPSK:uPSK` key) is elegant but **Hiddify can't parse it**, and its
    censorship behaviour is unproven. Classic SS works in every client and is
    field-tested through restrictive networks. This skill ships classic SS.
-2. **A blocked proxy is almost always a dirty IP, not your config.** If TCP
-   connects (`nc` OK) but the proxy times out from a censored network while it
-   works from outside, the **VPS IP is being interfered with by a firewall**.
-   Fix = a clean IP (different instance / region), *not* endless config edits.
-   See `references/troubleshooting.md`.
+2. **A firewall blocks two ways — a new IP only fixes one.** If TCP times out
+   from inside but the server answers from abroad, the **IP is null-routed** →
+   get a clean IP. But if TCP *connects* and the proxy even works, yet speed is
+   choked to a few KB/s on a **clean** IP, the firewall is **fingerprinting and
+   throttling classic SS** — a new IP just gets throttled again. That's the trap:
+   stop swapping IPs and switch the **transport** (REALITY or Cloudflare CDN).
+   See `references/anti-censorship.md` (block-vs-throttle diagnosis + modes) and
+   `references/troubleshooting.md`.
 3. **Never expose the panel to the public internet.** It binds `127.0.0.1:7000`.
    Reach it over an SSH tunnel. The only acceptable public exposure is a
    firewall rule that allows a **single source IP** (e.g. your static egress).
 4. **Point clients at a domain, not the raw IP.** Then migrating servers is a
-   one-line DNS change — clients never re-import. The domain must be **DNS-only**
-   (a plain A record; no Cloudflare "orange cloud" proxy — it can't carry SS).
+   one-line DNS change — clients never re-import. For SS/REALITY the record is
+   **DNS-only** (plain A; Cloudflare "orange cloud" can't carry SS). The one
+   exception is **CDN mode** (`references/anti-censorship.md`): there the orange
+   cloud + a VLESS+WS+TLS origin is the whole point, and clients pin a CF 优选IP.
 5. **Secrets stay on the server.** Upstream creds, account passwords, SSH keys,
    admin password — never commit them, never print them into shared logs.
 6. **One account = one port = one password — open every port in *two* firewalls.**
@@ -59,6 +67,12 @@ This skill is normally run by an agent for a user who may not have things ready.
 - A **fresh Ubuntu/Debian VPS** they control — its `user@host` and the **SSH key path**.
 - The **cloud provider** (Tencent / Aliyun / Vultr / DO …) — you'll tell them the
   exact ports to open in its firewall console, the one layer you can't automate.
+- **Which anti-censorship mode** (`references/anti-censorship.md`): **A** classic
+  SS (simplest, default), **B** VLESS+REALITY (beats protocol throttling, no
+  domain), or **C** VLESS+WS+TLS behind **Cloudflare** (hides the origin IP —
+  unblockable *and* un-throttleable, needs a domain on Cloudflare). Start at A;
+  move to B/C the moment a *clean* IP gets blocked or throttled. Mode C
+  additionally needs a **domain whose nameservers you can move to Cloudflare**.
 
 **Recommended / optional**
 - A **domain** they control (stable, migratable endpoint). None → clients use the raw IP.
@@ -105,6 +119,15 @@ AI-tool reliability, chain through a **static** (not rotating) residential upstr
    `curl -x socks5h://<upstream> https://ifconfig.me/ip` (or plain `curl ifconfig.me`
    for a direct exit). Then have the user import a config (next) and open
    `https://ifconfig.me` — it should show the expected egress IP.
+
+**Modes B / C (REALITY, Cloudflare CDN).** `deploy.sh` sets up classic SS. For
+an anti-censorship transport, add its inbound as a **separate `sing-box-*`
+service on its own port** so you never disturb a connection the user is on, then
+follow `references/anti-censorship.md` end to end (REALITY handshake-target
+gotcha, CF nameserver move, WS+TLS origin on a CF-proxied port, SSL=Full, 优选IP).
+Keep SS running as a fallback until the new transport is verified from a clean
+China vantage. **Verify by measuring from a machine with no VPN/TUN active** — a
+client tunnel on the test box poisons every speed/reachability check.
 
 ## Manage accounts
 
