@@ -18,6 +18,9 @@ VPS and it:
 - hardens the box (**key-only SSH, UFW, fail2ban, auto-updates**);
 - optionally **chains an upstream SOCKS5/HTTP proxy** (residential exit) and
   optionally **binds a domain** (migrate servers with a one-line DNS change);
+- **pick an anti-censorship transport**: classic SS (default) / VLESS+REALITY /
+  VLESS+WS+TLS behind a **Cloudflare CDN** — when a clean IP still gets blocked or
+  throttled, switch protocol or hide the origin behind CF (see [Architecture](#architecture--two-paths-depending-on-whether-you-have-cloudflare));
 - exports **Clash / `ss://`** configs for desktop and phone.
 
 ## The admin panel
@@ -52,6 +55,58 @@ Best setup: a nearby **clean-IP VPS** as the entry + a **static residential
 upstream** as the exit. Only bypassing a network block and don't care about IP
 reputation? Skip the upstream and exit straight from the VPS. See
 [`references/providers.md`](references/providers.md).
+
+## Architecture — two paths, depending on whether you have Cloudflare
+
+Same server, two ways clients reach it. **No Cloudflare domain → Path 1 (direct,
+the classic setup); a domain you can move onto Cloudflare → Path 2 (CDN,
+censorship-resistant).** The exit hop (the optional static-residential upstream)
+is identical in both.
+
+### Path 1 · Direct (no Cloudflare · simplest)
+
+Clients connect straight to your VPS public IP. Transport = classic Shadowsocks
+(or VLESS+REALITY).
+
+```text
+ ┌──────────┐   classic SS / REALITY  ┌───────────────┐  (optional) SOCKS5   ┌────────────────┐
+ │  device  │ ──────────────────────▶ │   your VPS     │ ───────────────────▶ │ static resi exit│ ──▶ internet
+ │ Mac/phone│    direct to VPS IP      │ sing-box in    │   residential proxy  │  e.g. 198.51.x.x │
+ └──────────┘                         └───────────────┘                      └────────────────┘
+      ▲ the VPS IP is exposed to clients: fast & stable while clean; once a firewall
+        targets it, either the whole IP is null-routed (get a clean IP) or classic SS
+        is fingerprint-throttled (switch to REALITY, or to Path 2).
+```
+
+### Path 2 · Cloudflare CDN (with a domain · censorship-resistant)
+
+Clients only ever talk to **Cloudflare**; your VPS origin IP never appears on the
+wire — a firewall can't block or fingerprint it (it's just ordinary HTTPS to CF).
+
+```text
+ ┌──────────┐  standard TLS  ┌──────────────┐   CF origin pull  ┌───────────────┐ (optional) resi ┌────────────────┐
+ │  device  │ ─────────────▶ │  Cloudflare   │ ────────────────▶ │  VPS origin    │ ──────────────▶ │ static resi exit│ ──▶ internet
+ │ Mac/phone│  优选IP : 443   │  edge          │                  │ VLESS+WS+TLS   │  residential    │  e.g. 198.51.x.x │
+ └──────────┘                └──────────────┘                   └───────────────┘                 └────────────────┘
+      ▲ you connect to a Cloudflare IP (a hand-picked "优选IP"); the origin IP never
+        goes on the wire → unblockable / un-throttleable. Cost: speed is capped by the
+        your-ISP→Cloudflare route (~1–2 Mbps is common on a mediocre China line).
+```
+
+### Which one
+
+| | Path 1 Direct | Path 2 Cloudflare CDN |
+|---|---|---|
+| Needs a domain | no (IP or DNS-only) | **yes** (NS moved to Cloudflare) |
+| Origin IP | exposed to clients | **hidden** (clients see only CF) |
+| IP null-routed | yes (get a new IP) | **can't reach it** |
+| Protocol throttled | classic SS yes (→ REALITY) | **can't fingerprint it** |
+| Speed | fastest on a clean IP | capped by China→CF route |
+| Best for | starting out, clean IP, no domain | IP keeps getting blocked/throttled |
+
+Start with Path 1; switch to REALITY or Path 2 the moment a *clean* IP gets
+blocked or throttled. All three transports (SS / REALITY / CF-CDN) and their
+step-by-step setup: [`references/anti-censorship.md`](references/anti-censorship.md).
 
 ## Quick start
 
@@ -114,9 +169,13 @@ This uses **classic Shadowsocks**: **one account = one port = one password**.
 ## Hard-won rules (the heart of this project)
 
 1. **Classic Shadowsocks, not SS2022** — SS2022 multi-user keys break Hiddify.
-2. **Times out but the port is reachable = dirty IP, not config** — get a clean IP.
+2. **A firewall blocks two ways; a new IP fixes only one** — times out from
+   inside = IP null-routed (get a clean IP); connects but a *clean* IP is choked
+   to a few KB/s = classic SS fingerprint-throttled (switch transport — REALITY
+   or Path 2 CDN, not another IP). See [`references/anti-censorship.md`](references/anti-censorship.md).
 3. **Never expose the panel publicly** — SSH tunnel, or a single-source-IP firewall rule.
-4. **Point clients at a domain (DNS-only)** — migrate with one DNS change.
+4. **Point clients at a domain (DNS-only)** — migrate with one DNS change. Exception:
+   **CDN mode** uses the Cloudflare orange cloud + a VLESS+WS+TLS origin on purpose.
 5. **Secrets stay on the server** — never committed.
 
 See [`references/`](references) for troubleshooting, security, clients, providers.
@@ -127,7 +186,7 @@ See [`references/`](references) for troubleshooting, security, clients, provider
 SKILL.md            full deploy/ops workflow (agent entry point)
 app.py              single-file web admin panel (stdlib only)
 scripts/            install.sh · harden.sh · deploy.sh
-references/         providers · troubleshooting · security · clients
+references/         anti-censorship · providers · troubleshooting · security · clients
 examples/           config.example.json
 ```
 
